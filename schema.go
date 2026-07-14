@@ -7,8 +7,6 @@ package entmcp
 import (
 	"fmt"
 	"sort"
-	"strings"
-	"unicode"
 
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/schema/field"
@@ -221,7 +219,8 @@ func buildToolSpecs(g *gen.Graph, cfg *Config) ([]ToolSpec, error) {
 				return nil, fmt.Errorf("entmcp: type %q edge %q: %w", t.Name, e.Name, err)
 			}
 			es := EdgeSpec{
-				GoName:   pascal(e.Name),
+				// ent's struct-member name (initialism-aware) so edge accessors match.
+				GoName:   e.StructField(),
 				JSONName: toSnakeCase(e.Name),
 				TypeName: e.Type.Name,
 				Unique:   e.Unique,
@@ -272,7 +271,10 @@ func buildFieldSpec(f *gen.Field, cfg *Config) (FieldSpec, error) {
 	}
 
 	fs := FieldSpec{
-		GoName:         pascal(f.Name),
+		// Use ent's own struct-member name so Go initialisms match the
+		// generated accessors/setters (e.g. "target_id" -> "TargetID",
+		// not "TargetId"). A naive PascalCase does not apply initialism rules.
+		GoName:         f.StructField(),
 		JSONName:       f.Name,
 		GoType:         goType(f),
 		GoTypeNillable: f.Nillable || f.Optional,
@@ -449,22 +451,4 @@ func isSortable(f *gen.Field) bool {
 	default:
 		return false
 	}
-}
-
-// pascal converts a snake_case or camelCase name to PascalCase.
-func pascal(s string) string {
-	if s == "" {
-		return ""
-	}
-	words := strings.Split(s, "_")
-	var b strings.Builder
-	for _, w := range words {
-		if w == "" {
-			continue
-		}
-		r := []rune(w)
-		r[0] = unicode.ToUpper(r[0])
-		b.WriteString(string(r))
-	}
-	return b.String()
 }

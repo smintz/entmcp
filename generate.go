@@ -57,7 +57,7 @@ func generateMCPPackage(g *gen.Graph, cfg *Config) error {
 	}
 
 	// Generate helpers file.
-	helpersSrc := genHelpersFile()
+	helpersSrc := genHelpersFile(g.Config.Package)
 	if err := writeGoFile(filepath.Join(outDir, "helpers.go"), helpersSrc); err != nil {
 		return fmt.Errorf("entmcp: write helpers file: %w", err)
 	}
@@ -164,7 +164,7 @@ func genServerFile(entPkg string, specs []ToolSpec) (string, error) {
 }
 
 // genHelpersFile generates the helpers.go file with shared utility functions.
-func genHelpersFile() string {
+func genHelpersFile(entPkg string) string {
 	var b strings.Builder
 	w := func(format string, args ...any) {
 		fmt.Fprintf(&b, format, args...)
@@ -175,7 +175,9 @@ func genHelpersFile() string {
 	w("import (\n")
 	w("\t\"encoding/json\"\n")
 	w("\t\"fmt\"\n\n")
-	w("\t\"entgo.io/ent\"\n")
+	// The IsNotFound/IsConstraintError/... helpers live in the user's GENERATED
+	// ent package, not in the entgo.io/ent runtime root.
+	w("\tent %q\n", entPkg)
 	w("\t\"github.com/modelcontextprotocol/go-sdk/mcp\"\n")
 	w(")\n\n")
 
@@ -204,9 +206,9 @@ func genHelpersFile() string {
 	w("\tswitch {\n")
 	w("\tcase ent.IsNotFound(err):\n")
 	w("\t\tif id != \"\" {\n")
-	w("\t\t\treturn toolError(fmt.Sprintf(\"%s with id %s not found\", entityType, id))\n")
+	w("\t\t\treturn toolError(fmt.Sprintf(\"%%s with id %%s not found\", entityType, id))\n")
 	w("\t\t}\n")
-	w("\t\treturn toolError(fmt.Sprintf(\"%s not found\", entityType))\n")
+	w("\t\treturn toolError(fmt.Sprintf(\"%%s not found\", entityType))\n")
 	w("\tcase ent.IsConstraintError(err):\n")
 	w("\t\treturn toolError(\"constraint violation: \" + sanitizeError(err))\n")
 	w("\tcase ent.IsValidationError(err):\n")
@@ -249,6 +251,7 @@ func genEntityToolsFile(entPkg string, spec ToolSpec, cfg *Config) (string, erro
 		`"encoding/json"`,
 		`"fmt"`,
 		`"strings"`,
+		`"github.com/modelcontextprotocol/go-sdk/mcp"`,
 	}
 	imports = append(imports, fmt.Sprintf("ent %q", entPkg))
 	imports = append(imports, fmt.Sprintf("%q", entPkg+"/"+spec.PackageName))
@@ -502,7 +505,14 @@ func genCreateHandler(b *bytes.Buffer, spec ToolSpec) {
 			w("\t\t\tif err := json.Unmarshal(v, &val); err != nil {\n")
 			w("\t\t\t\treturn toolError(\"invalid field %s: \" + err.Error()), nil\n", f.JSONName)
 			w("\t\t\t}\n")
-			w("\t\t\tbuilder.Set%s(&val)\n", f.GoName)
+			if f.FieldType == field.TypeBytes || f.FieldType == field.TypeJSON {
+				// Bytes/JSON are reference types: ent generates no SetNillable
+				// variant, and the setter takes the value directly.
+				w("\t\t\tbuilder.Set%s(val)\n", f.GoName)
+			} else {
+				// Optional scalar: use the pointer-accepting SetNillable setter.
+				w("\t\t\tbuilder.SetNillable%s(&val)\n", f.GoName)
+			}
 		} else {
 			w("\t\t\tvar val %s\n", f.GoType)
 			w("\t\t\tif err := json.Unmarshal(v, &val); err != nil {\n")
@@ -645,12 +655,13 @@ func genPredicatesBuilder(b *bytes.Buffer, spec ToolSpec) {
 		case field.TypeString:
 			w("\t\tcase string:\n")
 			w("\t\t\tpreds = append(preds, %s.%s(fv))\n", spec.PackageName, f.GoName+"EQ")
-		case field.TypeInt, field.TypeInt8, field.TypeInt16, field.TypeInt32, field.TypeInt64:
+		case field.TypeInt, field.TypeInt8, field.TypeInt16, field.TypeInt32, field.TypeInt64,
+			field.TypeUint, field.TypeUint8, field.TypeUint16, field.TypeUint32, field.TypeUint64:
+			// JSON numbers decode to float64; cast to the field's exact Go
+			// integer type (e.g. int64) so the predicate signature matches.
+			baseType := strings.TrimPrefix(f.GoType, "*")
 			w("\t\tcase float64:\n")
-			w("\t\t\tpreds = append(preds, %s.%s(int(fv)))\n", spec.PackageName, f.GoName+"EQ")
-		case field.TypeUint, field.TypeUint8, field.TypeUint16, field.TypeUint32, field.TypeUint64:
-			w("\t\tcase float64:\n")
-			w("\t\t\tpreds = append(preds, %s.%s(uint(fv)))\n", spec.PackageName, f.GoName+"EQ")
+			w("\t\t\tpreds = append(preds, %s.%s(%s(fv)))\n", spec.PackageName, f.GoName+"EQ", baseType)
 		case field.TypeFloat32, field.TypeFloat64:
 			w("\t\tcase float64:\n")
 			w("\t\t\tpreds = append(preds, %s.%s(fv))\n", spec.PackageName, f.GoName+"EQ")
@@ -716,7 +727,14 @@ func genUpdateHandler(b *bytes.Buffer, spec ToolSpec) {
 			w("\t\t\tif err := json.Unmarshal(v, &val); err != nil {\n")
 			w("\t\t\t\treturn toolError(\"invalid field %s: \" + err.Error()), nil\n", f.JSONName)
 			w("\t\t\t}\n")
-			w("\t\t\tbuilder.Set%s(&val)\n", f.GoName)
+			if f.FieldType == field.TypeBytes || f.FieldType == field.TypeJSON {
+				// Bytes/JSON are reference types: ent generates no SetNillable
+				// variant, and the setter takes the value directly.
+				w("\t\t\tbuilder.Set%s(val)\n", f.GoName)
+			} else {
+				// Optional scalar: use the pointer-accepting SetNillable setter.
+				w("\t\t\tbuilder.SetNillable%s(&val)\n", f.GoName)
+			}
 		} else {
 			w("\t\t\tvar val %s\n", f.GoType)
 			w("\t\t\tif err := json.Unmarshal(v, &val); err != nil {\n")
