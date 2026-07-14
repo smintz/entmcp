@@ -5,9 +5,6 @@
 package entmcp
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"entgo.io/ent/entc"
 	"entgo.io/ent/entc/gen"
 )
@@ -51,21 +48,3 @@ func (e *Extension) Templates() []*gen.Template {
 
 // Name implements the schema.Annotation interface for the Config annotation.
 func (c *Config) Name() string { return "EntMCPConfig" }
-
-// annotationFromGraph retrieves the EntMCPConfig annotation from the graph.
-func annotationFromGraph(g *gen.Graph) (*Config, error) {
-	v, ok := g.Config.Annotations["EntMCPConfig"]
-	if !ok {
-		return nil, fmt.Errorf("entmcp: EntMCPConfig annotation not found in graph")
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("entmcp: marshal config annotation: %w", err)
-	}
-	cfg := &Config{}
-	if err := json.Unmarshal(b, cfg); err != nil {
-		return nil, fmt.Errorf("entmcp: unmarshal config annotation: %w", err)
-	}
-	cfg.defaults()
-	return cfg, nil
-}

@@ -119,10 +119,5 @@ func deleteToolName(prefix, entityBase string) string {
 	return prefixed(prefix, "delete_"+entityBase)
 }
 
-// edgeListToolName returns the "list_<entity>_<edge>" tool name.
-func edgeListToolName(prefix, entityBase, edgeName string) string {
-	return prefixed(prefix, "list_"+entityBase+"_"+toSnakeCase(edgeName))
-}
-
 // ToSnakeCaseExport is an exported version of toSnakeCase for testing.
 func ToSnakeCaseExport(s string) string { return toSnakeCase(s) }
