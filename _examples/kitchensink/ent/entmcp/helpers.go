@@ -35,9 +35,9 @@ func mapEntError(err error, entityType, id string) *mcp.CallToolResult {
 	switch {
 	case ent.IsNotFound(err):
 		if id != "" {
-			return toolError(fmt.Sprintf("%!s(MISSING) with id %!s(MISSING) not found", entityType, id))
+			return toolError(fmt.Sprintf("%s with id %s not found", entityType, id))
 		}
-		return toolError(fmt.Sprintf("%!s(MISSING) not found", entityType))
+		return toolError(fmt.Sprintf("%s not found", entityType))
 	case ent.IsConstraintError(err):
 		return toolError("constraint violation: " + sanitizeError(err))
 	case ent.IsValidationError(err):
