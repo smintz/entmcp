@@ -14,7 +14,10 @@ Given an Ent schema, entmcp generates:
 
 | entmcp | entgo.io/ent | MCP Go SDK | Go  |
 |--------|-------------|------------|-----|
-| v0.x   | v0.14.x     | v0.8.x     | 1.24+ |
+| v0.x   | v0.14.x     | v1.x       | 1.24+ |
+
+The generated server targets the v1.x MCP Go SDK API
+(`mcp.NewServer(&mcp.Implementation{...}, nil)`).
 
 ## Installation
 
