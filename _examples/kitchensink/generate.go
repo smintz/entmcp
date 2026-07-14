@@ -23,7 +23,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := entc.Generate("./schema", &gen.Config{}, entc.Extensions(ext)); err != nil {
+	if err := entc.Generate("./schema", &gen.Config{
+		Target:  "./ent",
+		Package: "github.com/smintz/entmcp/_examples/kitchensink/ent",
+	}, entc.Extensions(ext)); err != nil {
 		log.Fatalf("running ent codegen: %v", err)
 	}
 }

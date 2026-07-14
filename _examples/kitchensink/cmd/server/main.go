@@ -19,6 +19,8 @@ import (
 	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/smintz/entmcp/_examples/kitchensink/ent"
+	"github.com/smintz/entmcp/_examples/kitchensink/ent/entmcp"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -27,28 +29,23 @@ func main() {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	// NOTE: After running generate.go, import paths will be:
-	//   "<module>/ent"
-	//   "<module>/ent/entmcp"
-	//
-	// For this example we demonstrate the server wiring pattern.
-	// The actual generated code would be imported like:
-	//
-	//   client, err := ent.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
-	//   ...
-	//   srv := entmcp.NewMCPServer(client,
-	//       entmcp.WithServerInfo("kitchensink", "v1"),
-	//       entmcp.WithLogger(logger),
-	//   )
-	//   if err := srv.Run(ctx, mcp.NewStdioTransport()); err != nil {
-	//       log.Fatal(err)
-	//   }
+	client, err := ent.Open("sqlite3", "file:kitchensink.db?cache=shared&_fk=1")
+	if err != nil {
+		log.Fatalf("opening ent client: %v", err)
+	}
+	defer client.Close()
 
-	_ = ctx
-	_ = logger
-	_ = mcp.NewServer
+	// Run auto-migration to create the schema.
+	if err := client.Schema.Create(ctx); err != nil {
+		log.Fatalf("running schema migration: %v", err)
+	}
 
-	log.Println("Run 'go run generate.go' in the kitchensink directory first to generate ent+entmcp code.")
-	log.Println("Then update the import paths in this file to match the generated module.")
-	os.Exit(0)
+	srv := entmcp.NewMCPServer(client,
+		entmcp.WithServerInfo("kitchensink", "v1"),
+		entmcp.WithLogger(logger),
+	)
+
+	if err := srv.Run(ctx, mcp.NewStdioTransport()); err != nil {
+		log.Fatal(err)
+	}
 }
